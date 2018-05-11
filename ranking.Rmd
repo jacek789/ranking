@@ -1,0 +1,224 @@
+---
+title: "Ranking"
+output: html_notebook
+---
+
+```{r}
+library(readr)
+library(stringr)
+library(dplyr)
+```
+
+
+
+```{r}
+read_csv2("mecze-towarzyski-2017-pilka-nozna.csv", col_names = c("date", "team1", "team2", "score")) %>% 
+  mutate(score1=as.integer(str_match(score, "(\\d*):")[,2])) %>% 
+  mutate(score2=as.integer(str_match(score, ":(\\d*)")[,2])) %>% 
+  filter(score1!=score2) %>% 
+  select(-score) ->
+  matches
+```
+
+```{r}
+countries <- read_lines("countries")
+
+read_csv("results.csv") %>% 
+  filter(date > as.Date("2014-01-01")) %>% 
+  select(home_team, away_team, home_score, away_score) %>% 
+  rename(team1=home_team, team2=away_team, score1=home_score, score2=away_score) %>% 
+  filter(team1 %in% countries & team2 %in% countries) %>% 
+  filter(score1 != score2) ->
+  matches.f
+
+#quality control
+matches.f %>% 
+  mutate(winner=ifelse(score1 > score2, team1, team2)) %>% 
+  pull(winner) %>% 
+  unique() %>% 
+  length() -> un
+un == length(unique(c(matches.f$team1, matches.f$team2)))
+
+#######3
+read_csv("world_cup", col_names = c("team1", "team2", "score")) %>% 
+  mutate(score1=as.integer(str_match(score, "(\\d*):")[,2])) %>% 
+  mutate(score2=as.integer(str_match(score, ":(\\d*)")[,2])) %>% 
+  select(-score) ->
+  matches.f
+
+```
+
+
+```{r}
+matches.f <- tibble("team1"=c("Hiszpania", "Estonia", "Estonia", "Kolumbia", "Brazylia", "Hiszpania"),
+           "team2"=c("Estonia", "Hiszpania", "Kolumbia", "Hiszpania", "Estonia", "Brazylia"),
+           "score1"=c(1,2,4,1,4,0),
+           "score2"=c(0,1,0,0,0,4))
+
+
+matches.f <- tibble("team1"=c("A", "B", "C", "D", "E", "Hiszpania"),
+           "team2"=c("Estonia", "Hiszpania", "Kolumbia", "Hiszpania", "Estonia", "Brazylia"),
+           "score1"=c(1,2,4,1,4,0),
+           "score2"=c(0,1,0,0,0,4))
+
+n_matches <- 20
+teams <- LETTERS[1:4]
+team1 <- sample(teams, n_matches, replace=T)
+team2 <- sample(teams, n_matches, replace=T)
+score1 <- rpois(n_matches, 1.5)
+score2 <- rpois(n_matches, 1.5)
+# delete illegal configuration
+tibble("team1"=team1,
+           "team2"=team2,
+           "score1"=score1,
+           "score2"=score2) %>% 
+  filter(team1!=team2) %>% 
+  filter(score1!=score2) ->
+  matches.f
+
+# matches.f <- tibble("team1"=c("Hiszpania", "Estonia", "Estonia", "Kolumbia"),
+#            "team2"=c("Estonia", "Hiszpania", "Kolumbia", "Hiszpania"),
+#            "score1"=c(1,2,4,1),
+#            "score2"=c(0,1,0,0))
+
+
+
+players <- unique(c(matches.f$team1, matches.f$team2))
+# matches <- matches_backup
+# matches matrix
+
+matches_matrix <- matrix(0, nrow=length(players), ncol=length(players), dimnames=list(players, players))
+results_matrix <- matrix(0, nrow=length(players), ncol=length(players), dimnames=list(players, players))
+for(player1 in players){
+  for(player2 in players){
+    matches.f %>% 
+      filter(team1==player1 & team2==player2) ->
+      m.filt
+    matches_matrix[player1, player2] <- m.filt %>% dim %>% `[`(1)
+    results_matrix[player1, player2] <- m.filt %>% mutate(is_wining=score1 > score2) %>% pull(is_wining) %>% sum
+
+    matches.f %>% 
+      filter(team1==player2 & team2==player1) ->
+      m.filt
+    matches_matrix[player1, player2] <- matches_matrix[player1, player2] + m.filt %>% dim %>% `[`(1)
+    results_matrix[player1, player2] <- results_matrix[player1, player2] + m.filt %>% mutate(is_wining=score1 < score2) %>% pull(is_wining) %>% sum
+  }
+}
+# matches.f
+# matches_matrix  # M
+# results_matrix
+
+# matches_matrix <- matches_matrix + t(matches_matrix)
+
+number_of_matches_played <- apply(matches_matrix, 1, sum)  # m
+average_scores <- apply(results_matrix, 1, sum) / number_of_matches_played # s
+```
+
+
+```{r}
+library(nleqslv)
+n_teams <- length(players)
+
+fn <- function(x, a=T){
+  y <- numeric(n_teams)
+  denom <- numeric(n_teams)
+  for(i in 1:n_teams){
+    d <- numeric(n_teams)  # tworzy zera (na pewno będzie jedno zero - dla j==i)
+    for(j in 1:n_teams){
+      if(j != i){
+        d[j] <- matches_matrix[i, j] / (x[i] + x[j])
+      }
+    }
+    denom[i] <- sum(d)
+  }
+  
+  y = number_of_matches_played * average_scores / denom
+  if(a){
+    return(y-x)
+  }else{
+    return(y)
+  }
+}
+
+jac <- function(x){
+  y = matrix(0, ncol=n_teams, nrow=n_teams)
+  yy <- -fn(x, a=F)^2
+  for(i in 1:n_teams){
+    for(j in 1:n_teams){
+      y[i, j] <- yy[i] * (-matches_matrix[i, j] / (x[i] + x[j])^2)
+    }
+  }
+  y
+}
+
+ans <- list(x=-1, fvec=999)
+while(any(ans$x <= 0) | any(abs(ans$fvec) > 1e-5)){
+  x = runif(n_teams) * 100
+  # x = rnorm(n_teams) * 10
+  ans = nleqslv(x, fn, jac=jac)
+}
+ans
+names(number_of_matches_played)[order(log(ans$x))]
+```
+
+# Symulacja
+```{r}
+n_matches <- 300
+teams <- LETTERS[1:4]
+strength <- runif(length(teams), 0.1, 0.3)
+names(strength) <- teams
+  
+team1 <- sample(teams, n_matches, replace=T)
+team2 <- sample(teams, n_matches, replace=T)
+# score1 <- rpois(n_matches, 1.5)
+# score2 <- rpois(n_matches, 1.5)
+# delete illegal configuration
+tibble("team1"=team1,
+       "team2"=team2) %>% 
+  mutate(score1=rpois(n_matches, strength[team1]*10)) %>% 
+  mutate(score2=rpois(n_matches, strength[team2]*10)) %>% 
+  filter(team1!=team2) %>%
+  filter(score1!=score2) ->
+  matches.f
+matches.f %>% 
+  mutate(winner=ifelse(score1 > score2, team1, team2)) %>% 
+  pull(winner) %>% 
+  unique() %>% 
+  length() -> un
+un == n_teams
+strength
+names(strength[order(strength)])
+```
+
+
+
+
+
+
+siła drużyn losowanie wyników porównanie z symulacja
+
+
+
+jak dobrać dwóc zawodników do 16. (w systemie pucharowym)
+1 2 4 8 16 32  
+
+"losowe" łączenie w pary
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
