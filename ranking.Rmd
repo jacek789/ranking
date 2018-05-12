@@ -9,7 +9,7 @@ library(stringr)
 library(dplyr)
 library(nleqslv)
 
-fn <- function(x, a=T){
+fn <- function(x){
   x <- x[-length(x)]
   y <- numeric(n_teams)
   denom <- numeric(n_teams)
@@ -24,102 +24,65 @@ fn <- function(x, a=T){
   }
   
   y = number_of_matches_played * average_scores / denom
-  if(a){
-    return(c(y-x, sum(y)-1))
-  }else{
-    return(number_of_matches_played * average_scores / denom)
-  }
+  
+  return(c(y-x, sum(y)-1))
 }
 
-jac <- function(x){
-  y = matrix(0, ncol=n_teams, nrow=n_teams)
-  yy <- -(fn(x, a=F)^2)
-  for(i in 1:n_teams){
-    for(j in 1:n_teams){
-      y[i, j] <- yy[i] * (-matches_matrix[i, j] / (x[i] + x[j])^2)
-    }
-  }
-  
-  den <- numeric(n_teams)
-  for(i in 1:n_teams){
-    d <- numeric(n_teams)  # tworzy zera (na pewno będzie jedno zero - dla j==i)
-    for(j in 1:n_teams){
-      if(j != i){
-        d[j] <- -matches_matrix[i, j] / (x[i] + x[j])^2
-      }
-    }
-    den[i] <- sum(d)
-  }
-  
-  for(i in 1:n_teams){
-    y[i,i] <- yy[i] * den[i]
-  }
-  t(y)
-}
 
 matr <- function(matches.f=matches.f){
-players <- unique(c(matches.f$team1, matches.f$team2))
-
-matches_matrix <- matrix(0, nrow=length(players), ncol=length(players), dimnames=list(players, players))
-results_matrix <- matrix(0, nrow=length(players), ncol=length(players), dimnames=list(players, players))
-for(player1 in players){
-  for(player2 in players){
-    matches.f %>% 
-      filter(team1==player1 & team2==player2) ->
-      m.filt
-    matches_matrix[player1, player2] <- m.filt %>% dim %>% `[`(1)
-    results_matrix[player1, player2] <- m.filt %>% mutate(is_wining=score1 > score2) %>% pull(is_wining) %>% sum
-
-    matches.f %>% 
-      filter(team1==player2 & team2==player1) ->
-      m.filt
-    matches_matrix[player1, player2] <- matches_matrix[player1, player2] + m.filt %>% dim %>% `[`(1)
-    results_matrix[player1, player2] <- results_matrix[player1, player2] + m.filt %>% mutate(is_wining=score1 < score2) %>% pull(is_wining) %>% sum
-  }
-}
-
-number_of_matches_played <- apply(matches_matrix, 1, sum)  # m
-average_scores <- apply(results_matrix, 1, sum) / number_of_matches_played # s
-
-list(
-  "matches_matrix"=matches_matrix,
-  "results_matrix"=results_matrix,
-  "number_of_matches_played"=number_of_matches_played,
-  "average_scores"=average_scores,
-  "players"=players)
-}
-
-get_scores <- function(strength1, strength2){
+  players <- unique(c(matches.f$team1, matches.f$team2))
   
-  diff <- abs(strength1[1] - strength2[1]) + 1
-  stronger_team <- sample(0:1, 1, prob=(c(1/(diff+1), diff/(diff+1))))
-  out <- c(stronger_team, abs(stronger_team - 1))
-  if(strength1[1] > strength2[1]){
-    outt <- tibble("score1"=out[1], "score2"=out[2])
-  }else{
-    outt <- tibble("score1"=rev(out)[1], "score2"=rev(out)[2])
-  }
-    
-  for(i in 2:length(strength1)){
-    diff <- abs(strength1[i] - strength2[i]) + 1
-    stronger_team <- sample(0:1, 1, prob=(c(1/(diff+1), diff/(diff+1))))
-    out2 <- c(stronger_team, abs(stronger_team - 1))
-    if(strength1[i] > strength2[i]){
-      rw <- tibble("score1"=out2[1], "score2"=out2[2])
-    }else{
-      rw <- tibble("score1"=rev(out2)[1], "score2"=rev(out2)[2])
+  matches_matrix <- matrix(0, nrow=length(players), ncol=length(players), dimnames=list(players, players))
+  results_matrix <- matrix(0, nrow=length(players), ncol=length(players), dimnames=list(players, players))
+  for(player1 in players){
+    for(player2 in players){
+      matches.f %>% 
+        filter(team1==player1 & team2==player2) ->
+        m.filt
+      matches_matrix[player1, player2] <- m.filt %>% dim %>% `[`(1)
+      results_matrix[player1, player2] <- m.filt %>% mutate(is_wining=score1 > score2) %>% pull(is_wining) %>% sum
+  
+      matches.f %>% 
+        filter(team1==player2 & team2==player1) ->
+        m.filt
+      matches_matrix[player1, player2] <- matches_matrix[player1, player2] + m.filt %>% dim %>% `[`(1)
+      results_matrix[player1, player2] <- results_matrix[player1, player2] + m.filt %>% mutate(is_wining=score1 < score2) %>% pull(is_wining) %>% sum
     }
-    outt %>% 
-      bind_rows(rw) ->
-      outt
   }
-  outt
+  
+  number_of_matches_played <- apply(matches_matrix, 1, sum)  # m
+  average_scores <- apply(results_matrix, 1, sum) / number_of_matches_played # s
+  
+  list(
+    "matches_matrix"=matches_matrix,
+    "results_matrix"=results_matrix,
+    "number_of_matches_played"=number_of_matches_played,
+    "average_scores"=average_scores,
+    "players"=players)
+}
+  
+get_scores <- function(strength1, strength2){
+  out <- tibble("score1"=numeric(), "score2"=numeric())
+
+  for(i in 1:length(strength1)){
+    diff <- abs(strength1[i] - strength2[i]) + .1
+    stronger_team <- sample(0:1, 1, prob=(c(.1, diff))) # aby silniejsza drużyna miała więcej zwycięstw
+    if(strength1[i] > strength2[i]){
+      out %>% 
+        bind_rows(tibble("score1"=stronger_team, "score2"=abs(stronger_team - 1))) ->
+        out
+    }else{
+      out %>% 
+        bind_rows(tibble("score1"=abs(stronger_team - 1), "score2"=stronger_team)) ->
+        out
+    }
+  }
+  out
 }
 
 ```
 
-
-
+Rzeczywiste dane
 ```{r}
 read_csv2("mecze-towarzyski-2017-pilka-nozna.csv", col_names = c("date", "team1", "team2", "score")) %>% 
   mutate(score1=as.integer(str_match(score, "(\\d*):")[,2])) %>% 
@@ -127,7 +90,6 @@ read_csv2("mecze-towarzyski-2017-pilka-nozna.csv", col_names = c("date", "team1"
   filter(score1!=score2) %>% 
   select(-score) ->
   matches
-
 
 read_csv("world_cup", col_names = c("team1", "team2", "score")) %>% 
   mutate(score1=as.integer(str_match(score, "(\\d*):")[,2])) %>% 
@@ -148,16 +110,16 @@ players <- m$players
 
 n_teams <- length(players)
 
-sm=F
+sm=F  # aby wymusić dobre rozwiązanie
 fv=T
 d=T
-# while((sm < 1.1 & sm > 0.9) | any(fv)){
+# nie znajduje takiego rozwiązania
 while(any(fv) | sm | d){
   x = runif(n_teams+1) * 10
   # x = rnorm(n_teams+1) * 100
-  ans = nleqslv(x, fn, control = list("allowSingular"=T))#, jac=jac)
+  ans = nleqslv(x, fn, control = list("allowSingular"=T))
   
-  sm <- sum(ans$x[-length(ans$x)]) < 0.9
+  sm <- sum(ans$x[-length(ans$x)]) < 0.9  # aby wymusić dobre rozwiązanie
   d <- any(ans$x[-length(ans$x)] < 0)
   fv <- abs(ans$fvec) > 1e-8
 }
@@ -167,31 +129,22 @@ players[order(-log(ans$x))]
 
 # Symulacja
 ```{r}
-n_matches <- 1000
+n_matches <- 30
 teams <- LETTERS[1:5]
 n_teams <-  length(teams)
 
-strength <- seq(0, 1, length.out=n_teams)#runif(length(teams), 0.1, 0.3)
+strength <- seq(0.1, 1, length.out=n_teams)  # A najsłabsza, następnie B itd
 names(strength) <- teams
-  
+
 team1 <- sample(teams, n_matches, replace=T)
 team2 <- sample(teams, n_matches, replace=T)
-
-
+ 
 tibble("team1"=team1,
        "team2"=team2) %>% 
-  mutate(score1=strength[team1], score2=strength[team2]) %>% 
-  # bind_cols(get_scores(strength[team1], strength[team2])) %>% 
+  bind_cols(get_scores(strength[team1], strength[team2])) %>%
   filter(team1!=team2) %>%
   filter(score1!=score2) ->
   matches.f
-
-matches.f %>% 
-  mutate(winner=ifelse(score1 > score2, team1, team2)) %>% 
-  pull(winner) %>% 
-  unique() %>% 
-  length() -> un
-un == n_teams
 
 m <- matr(matches.f)
 
@@ -201,11 +154,8 @@ number_of_matches_played <- m$number_of_matches_played
 average_scores <- m$average_scores
 players <- m$players
 
-# names(strength[order(strength)])
-
 sm=0
 fv=T
-# while((sm < 1.1 & sm > 0.9) | any(fv)){
 while(any(fv)){
   x = runif(n_teams+1) * 1
   # x = rnorm(n_teams+1) * 100
@@ -220,87 +170,52 @@ players[order(-log(ans$x))]
 
 ```
 
-
-
-
-
-
-siła drużyn losowanie wyników porównanie z symulacja
-
-
-
-jak dobrać dwóc zawodników do 16. (w systemie pucharowym)
-1 2 4 8 16 32  
-
-"losowe" łączenie w pary
-
- tworzenie układu równań
-
+Symulacja - układ równań do wolframa
 ```{r}
-n_matches <- 50
+n_matches <- 30
 teams <- LETTERS[1:3]
 n_teams <-  length(teams)
 
-strength <- seq(0, 1, length.out=n_teams)#runif(length(teams), 0.1, 0.3)
+strength <- seq(0.1, 1, length.out=n_teams)  # A najsłabsza
 names(strength) <- teams
-  
+
 team1 <- sample(teams, n_matches, replace=T)
 team2 <- sample(teams, n_matches, replace=T)
-
-
+ 
 tibble("team1"=team1,
        "team2"=team2) %>% 
-  # mutate(score1=strength[team1], score2=strength[team2]) %>% 
   bind_cols(get_scores(strength[team1], strength[team2])) %>%
   filter(team1!=team2) %>%
   filter(score1!=score2) ->
   matches.f
 
+m <- matr(matches.f)
 
-players <- unique(c(matches.f$team1, matches.f$team2))
+matches_matrix <- m$matches_matrix
+results_matrix <- m$results_matrix
+number_of_matches_played <- m$number_of_matches_played
+average_scores <- m$average_scores
+players <- m$players
 
-matches_matrix <- matrix(0, nrow=length(players), ncol=length(players), dimnames=list(players, players))
-results_matrix <- matrix(0, nrow=length(players), ncol=length(players), dimnames=list(players, players))
-for(player1 in players){
-  for(player2 in players){
-    matches.f %>% 
-      filter(team1==player1 & team2==player2) ->
-      m.filt
-    matches_matrix[player1, player2] <- m.filt %>% dim %>% `[`(1)
-    results_matrix[player1, player2] <- m.filt %>% mutate(is_wining=score1 > score2) %>% pull(is_wining) %>% sum
 
-    matches.f %>% 
-      filter(team1==player2 & team2==player1) ->
-      m.filt
-    matches_matrix[player1, player2] <- matches_matrix[player1, player2] + m.filt %>% dim %>% `[`(1)
-    results_matrix[player1, player2] <- results_matrix[player1, player2] + m.filt %>% mutate(is_wining=score1 < score2) %>% pull(is_wining) %>% sum
+x <- teams
+y <- numeric(n_teams)
+denom <- character(n_teams)
+for(i in 1:n_teams){
+  d <- rep("0", n_teams)  # tworzy zera (na pewno będzie jedno zero - dla j==i)
+  for(j in 1:n_teams){
+    if(j != i){
+      d[j] <- paste0(matches_matrix[i, j], "/(", x[i], "+", x[j], ")")
+    }
   }
+  denom[i] <- paste0(d, collapse = "+")
 }
 
-number_of_matches_played <- apply(matches_matrix, 1, sum)  # m
-average_scores <- apply(results_matrix, 1, sum) / number_of_matches_played # s
+y = paste0(number_of_matches_played * average_scores, "/(",  denom, ")")
+z <- paste(players, y, sep="==", collapse=", ")
+zz <- paste0(z, ", ", paste(teams, collapse="+"), "==1")
 
-
-
-  x <- teams
-  y <- numeric(n_teams)
-  denom <- character(n_teams)
-  for(i in 1:n_teams){
-    d <- rep("0", n_teams)  # tworzy zera (na pewno będzie jedno zero - dla j==i)
-    for(j in 1:n_teams){
-      if(j != i){
-        d[j] <- paste0(matches_matrix[i, j], "/(", x[i], "+", x[j], ")")
-      }
-    }
-    denom[i] <- paste0(d, collapse = "+")
-  }
-  
-  y = paste0(number_of_matches_played * average_scores, "/(",  denom, ")")
- z <- paste(players, y, sep="==", collapse=", ")
- zz <- paste0(z, ", ", paste(teams, collapse="+"), "==1")
-
- cat(paste0("{",zz,"}"))
-
+cat(paste0("{",zz,"}"))
 ```
 
 
