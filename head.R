@@ -33,23 +33,31 @@ get_scores <- function(strength1, strength2){
 ranking_problem <- function(matches.f=matches.f){
   players <- unique(c(matches.f$team1, matches.f$team2))
   
-  matches_matrix <- matrix(0, nrow=length(players), ncol=length(players), dimnames=list(players, players))
+  matches.f %>% 
+    filter(score1 > score2) ->
+    mtch1
+  
+  matches.f %>% 
+    filter(score1 < score2) %>% 
+    rename(team11 = team1, score11 = score1) %>% 
+    transmute(team1 = team2, team2 = team11, score1 = score2, score2 = score11) ->
+    mtch2
+  
+  mtch1 %>% 
+    bind_rows(mtch2) ->
+    matches.f
+  
   results_matrix <- matrix(0, nrow=length(players), ncol=length(players), dimnames=list(players, players))
-  for(player1 in players){
-    for(player2 in players){
-      matches.f %>% 
-        filter(team1==player1 & team2==player2) ->
-        m.filt
-      matches_matrix[player1, player2] <- m.filt %>% dim %>% `[`(1)
-      results_matrix[player1, player2] <- m.filt %>% mutate(is_wining=score1 > score2) %>% pull(is_wining) %>% sum
-      
-      matches.f %>% 
-        filter(team1==player2 & team2==player1) ->
-        m.filt
-      matches_matrix[player1, player2] <- matches_matrix[player1, player2] + m.filt %>% dim %>% `[`(1)
-      results_matrix[player1, player2] <- results_matrix[player1, player2] + m.filt %>% mutate(is_wining=score1 < score2) %>% pull(is_wining) %>% sum
-    }
+  
+  for(player in players){
+    matches.f %>% 
+      filter(team1 == player) %>% 
+      pull(team2) ->
+      loosers
+    results_matrix[player, loosers] <- 1
   }
+  
+  matches_matrix <- results_matrix + t(results_matrix)
   
   number_of_matches_played <- apply(matches_matrix, 1, sum)  # m
   average_scores <- apply(results_matrix, 1, sum) / number_of_matches_played # s

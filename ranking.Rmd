@@ -3,6 +3,11 @@ title: "Ranking"
 output: html_notebook
 ---
 
+```{r head}
+source("head.R")
+```
+
+
 Rzeczywiste dane
 ```{r}
 read_csv2("mecze-towarzyski-2017-pilka-nozna.csv", col_names = c("date", "team1", "team2", "score")) %>% 
@@ -240,7 +245,7 @@ A <- matrix(c(0, 10, 9, 7, 10, 0, 9, 6, 1, 1, 0, 1, 3, 4, 19, 0), nrow = 4, byro
 ```{r}
 cr <- numeric()
 tic()
-for(i in 1:10){
+for(i in 1:100){
   n_matches <- 150
   teams <- as.character(28:1)  # LETTERS[1:26]
   n_teams <-  length(teams)
@@ -266,13 +271,6 @@ for(i in 1:10){
   players <- m$players
   n_teams <- length(players)
   
-  # D <- (results_matrix - t(results_matrix)) %*% solve(matches_matrix)
-  # 
-  # 
-  # players
-  # (ans <- optim(rep(1, n_teams), least_squares, control = list("maxit"=5000)))
-  # sum(ans$par)
-  # players[order(ans$par)] # od najsilniejszej do najsłabszej
   
   res <- ranking(results_matrix)
   # res[order(-res)]
@@ -282,7 +280,8 @@ for(i in 1:10){
   cr <- c(cr, cor(1:28, ras, method="spearman"))}
 toc() # 10 razy: 22s
 
-summry(cr)
+summary(cr)
+
 ```
 
 
