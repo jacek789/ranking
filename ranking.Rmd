@@ -9,6 +9,10 @@ library(stringr)
 library(dplyr)
 library(nleqslv)
 
+`%+%` <- function(x, y){
+  paste0(x, y)
+}
+
 fn <- function(x){
   x <- x[-length(x)]
   y <- numeric(n_teams)
@@ -90,8 +94,8 @@ read_csv2("mecze-towarzyski-2017-pilka-nozna.csv", col_names = c("date", "team1"
   filter(score1!=score2) %>% 
   select(-score) ->
   matches
-
-read_csv("world_cup", col_names = c("team1", "team2", "score")) %>% 
+# https://www.flashscores.co.uk/football/world/world-cup-2014/results/
+read_csv("world_cup", col_names = c("team1", "team2", "score"), comment="#", col_types='ccc') %>% 
   mutate(score1=as.integer(str_match(score, "(\\d*):")[,2])) %>% 
   mutate(score2=as.integer(str_match(score, ":(\\d*)")[,2])) %>% 
   select(-score) ->
@@ -172,8 +176,8 @@ players[order(-log(ans$x))]
 
 Symulacja - układ równań do wolframa
 ```{r}
-n_matches <- 30
-teams <- LETTERS[1:3]
+n_matches <- 100
+teams <- LETTERS[1:2]
 n_teams <-  length(teams)
 
 strength <- seq(0.1, 1, length.out=n_teams)  # A najsłabsza
@@ -218,11 +222,128 @@ zz <- paste0(z, ", ", paste(teams, collapse="+"), "==1")
 cat(paste0("{",zz,"}"))
 ```
 
+Bruteforce
+```{r}
+m <- matr(read_tsv("dane"))
+matches_matrix <- m$matches_matrix
+results_matrix <- m$results_matrix
+number_of_matches_played <- m$number_of_matches_played
+average_scores <- m$average_scores
+players <- m$players
+
+n_teams=3
+fn2 <- function(x){
+  y <- numeric(n_teams)
+  denom <- numeric(n_teams)
+  for(i in 1:n_teams){
+    d <- numeric(n_teams)  # tworzy zera (na pewno będzie jedno zero - dla j==i)
+    for(j in 1:n_teams){
+      if(j != i){
+        d[j] <- matches_matrix[i, j] / (x[i] + x[j])
+      }
+    }
+    denom[i] <- sum(d)
+  }
+  
+  y = number_of_matches_played * average_scores / denom
+  
+  return(c(y-x))
+}
+
+tic()
+x <- data.frame("x"=rep(seq(0, 1, 0.002), each=501*501), "y"=rep(seq(0, 1, 0.002), each=501), "z"=seq(0, 1, 0.002))
+toc()
+x %>% 
+  filter(x+y+z==1) ->
+  y
+apply(y, 1, fn2) %>%
+  t %>% 
+  tbl_df %>% 
+  mutate(sum=A+B+C) %>% 
+  filter(A>=0 & B>=0 & C>=0) %>% 
+  filter(sum < 0.5) ->
+  res
+```
 
 
+# Least squares
+```{r}
+fnl <- function(x){
+  # x <- x[-length(x)]
+  out <- 0
+  for(i in 1:length(x)){
+    for(j in 1:length(x)){
+      out <- out + matches_matrix[i, j] * (D[i, j] - (x[i] - x[j]))^2
+    }
+  }
+  out <- out + abs(sum(x))*10000000
+  return(out)
+}
 
 
+fnl_wolfram <- function(x){
+  # x <- x[-length(x)]
+  out <- ""
+  for(i in 1:length(x)){
+    for(j in 1:length(x)){
+      if(i != j & matches_matrix[i, j] != 0){
+        out <- out %+% "+" %+% matches_matrix[i, j] %+% "*" %+% "(" %+% D[i, j] %+% "-" %+% x[i] %+% "+" %+% x[j] %+% ")^2"
+      }
+    }
+  }
+  # out <- out + abs(sum(x))*1e15
+  return(out)
+}
+(w <- fnl_wolfram(players))
+w <- str_replace_all(w, "Germany", "A")
+w <- str_replace_all(w, "Argentina", "B")
+w <- str_replace_all(w, "Netherlands", "C")
+w <- str_replace_all(w, "Brazil", "D")
+w <- str_replace_all(w, "Costa Rica", "E")
+w <- str_replace_all(w, "Belgium", "F")
+w <- str_replace_all(w, "Colombia", "G")
+w <- str_replace_all(w, "France", "H")
+w
+w <- str_replace_all(w, "\\+1\\*\\(", "+(")
+w <- str_replace_all(w, "0\\-", "\\-")
+w
+```
 
+
+```{r}
+n_matches <- 7
+teams <- LETTERS[1:3]
+n_teams <-  length(teams)
+
+strength <- seq(0.1, 1, length.out=n_teams)  # A najsłabsza
+names(strength) <- teams
+
+team1 <- sample(teams, n_matches, replace=T)
+team2 <- sample(teams, n_matches, replace=T)
+ 
+tibble("team1"=team1,
+       "team2"=team2) %>% 
+  bind_cols(get_scores(strength[team1], strength[team2])) %>% 
+  filter(team1!=team2) %>%
+  filter(score1!=score2) ->
+  matches.f
+
+m <- matr(matches.f)
+matches_matrix <- m$matches_matrix
+results_matrix <- m$results_matrix
+number_of_matches_played <- m$number_of_matches_played
+average_scores <- m$average_scores
+players <- m$players
+n_teams <- length(players)
+
+D <- (results_matrix - t(results_matrix)) %*% solve(matches_matrix)
+
+results_matrix
+players
+(ans <- optim(rep(1, n_teams), fnl, control = list("maxit"=5000)))
+sum(ans$par)
+players[order(ans$par)] # od najsilniejszej do najsłabszej
+```
 
 
 
