@@ -186,8 +186,6 @@ apply(y, 1, fn2) %>%
 
 # Least squares
 ```{r}
-tic()
-for(i in 1:3){
 n_matches <- 80
 teams <- as.character(28:1)  # LETTERS[1:26]
 n_teams <-  length(teams)
@@ -213,21 +211,13 @@ average_scores <- m$average_scores
 players <- m$players
 n_teams <- length(players)
 
-# D <- (results_matrix - t(results_matrix)) %*% solve(matches_matrix)
-# 
-# 
-# players
-# (ans <- optim(rep(1, n_teams), least_squares, control = list("maxit"=5000)))
-# sum(ans$par)
-# players[order(ans$par)] # od najsilniejszej do najsłabszej
+D <- (results_matrix - t(results_matrix)) %*% solve(matches_matrix)
 
-res <- ranking(results_matrix)
-# res[order(-res)]
-ras <- names(res[order(-res)])
-ras <- as.numeric(ras)
 
-cr <- c(cr, cor(1:28, ras, method="spearman"))}
-toc() # 10 razy: 22s
+players
+(ans <- optim(rep(1, n_teams), least_squares, control = list("maxit"=5000)))
+sum(ans$par)
+players[order(ans$par)] # od najsilniejszej do najsłabszej
 ```
 
 # Recursive Buchholz tests
@@ -249,10 +239,53 @@ A <- matrix(c(0, 10, 9, 7, 10, 0, 9, 6, 1, 1, 0, 1, 3, 4, 19, 0), nrow = 4, byro
 # Korelacja pomiędzy wynikami założonymi a otrzymanymi
 ```{r}
 cr <- numeric()
+tic()
+for(i in 1:10){
+  n_matches <- 150
+  teams <- as.character(28:1)  # LETTERS[1:26]
+  n_teams <-  length(teams)
+  
+  strength <- seq(0.1, 1, length.out=n_teams)  # A najsłabsza
+  names(strength) <- teams
+  
+  team1 <- sample(teams, n_matches, replace=T)
+  team2 <- sample(teams, n_matches, replace=T)
+   
+  tibble("team1"=team1,
+         "team2"=team2) %>% 
+    bind_cols(get_scores(strength[team1], strength[team2])) %>% 
+    filter(team1!=team2) %>%
+    filter(score1!=score2) ->
+    matches.f
+  
+  m <- ranking_problem(matches.f)
+  matches_matrix <- m$matches_matrix
+  results_matrix <- m$results_matrix
+  number_of_matches_played <- m$number_of_matches_played
+  average_scores <- m$average_scores
+  players <- m$players
+  n_teams <- length(players)
+  
+  # D <- (results_matrix - t(results_matrix)) %*% solve(matches_matrix)
+  # 
+  # 
+  # players
+  # (ans <- optim(rep(1, n_teams), least_squares, control = list("maxit"=5000)))
+  # sum(ans$par)
+  # players[order(ans$par)] # od najsilniejszej do najsłabszej
+  
+  res <- ranking(results_matrix)
+  # res[order(-res)]
+  ras <- names(res[order(-res)])
+  ras <- as.numeric(ras)
+  
+  cr <- c(cr, cor(1:28, ras, method="spearman"))}
+toc() # 10 razy: 22s
+
+summry(cr)
 ```
 
-move function definition to another file
-refactor
+
 
 
 
