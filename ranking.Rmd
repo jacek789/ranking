@@ -243,24 +243,28 @@ A <- matrix(c(0, 10, 9, 7, 10, 0, 9, 6, 1, 1, 0, 1, 3, 4, 19, 0), nrow = 4, byro
 
 # Korelacja pomiędzy wynikami założonymi a otrzymanymi
 ```{r}
-cr <- numeric()
+# cr <- numeric()
 tic()
 for(i in 1:100){
-  n_matches <- 150
+  n_matches <- 70
   teams <- as.character(28:1)  # LETTERS[1:26]
   n_teams <-  length(teams)
   
   strength <- seq(0.1, 1, length.out=n_teams)  # A najsłabsza
   names(strength) <- teams
   
-  team1 <- sample(teams, n_matches, replace=T)
-  team2 <- sample(teams, n_matches, replace=T)
+  team1 <- teams  # aby każda drużyna zagrała przynajmniej jeden mecz
+  team2 <- sample(teams)
+  while(any(team1 == team2)){
+    team2 <- sample(teams)
+  }
+  team1 <- c(team1, sample(teams, n_matches - n_teams, replace=T))
+  team2 <- c(team2, sample(teams, n_matches - n_teams, replace=T))
    
   tibble("team1"=team1,
          "team2"=team2) %>% 
     bind_cols(get_scores(strength[team1], strength[team2])) %>% 
-    filter(team1!=team2) %>%
-    filter(score1!=score2) ->
+    filter(team1!=team2) ->
     matches.f
   
   m <- ranking_problem(matches.f)
@@ -281,7 +285,6 @@ for(i in 1:100){
 toc() # 10 razy: 22s
 
 summary(cr)
-
 ```
 
 
