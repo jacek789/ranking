@@ -135,7 +135,7 @@ least_squares_wolfram <- function(x){
 
 # Recursive Buchholz
 # tournament - results matrix
-recursive_uchholz <- function(tournament){ # tournament odpowiada macierzy A z artyułu
+recursive_buchholz <- function(tournament){ # tournament odpowiada macierzy A z artyułu
   n <- dim(tournament)[1]
   
   matches_matrix <- tournament + t(tournament) # macierz M
