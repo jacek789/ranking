@@ -14,17 +14,12 @@ get_scores <- function(strength1, strength2){
   out <- tibble("score1"=numeric(), "score2"=numeric())
   
   for(i in 1:length(strength1)){
-    diff <- abs(strength1[i] - strength2[i]) + .1
-    stronger_team <- sample(0:1, 1, prob=(c(.1, diff))) # aby silniejsza drużyna miała więcej zwycięstw
-    if(strength1[i] > strength2[i]){
-      out %>% 
-        bind_rows(tibble("score1"=stronger_team, "score2"=abs(stronger_team - 1))) ->
-        out
-    }else{
-      out %>% 
-        bind_rows(tibble("score1"=abs(stronger_team - 1), "score2"=stronger_team)) ->
-        out
-    }
+    diff <- sigmoid(strength1[i] - strength2[i])
+    score1 <- sample(0:1, 1, prob=c(1 - diff, diff))
+    score2 <- abs(score1 - 1)
+    out %>% 
+      bind_rows(tibble("score1"=score1, "score2"=score2)) ->
+      out
   }
   out
 }
@@ -54,7 +49,9 @@ ranking_problem <- function(matches.f=matches.f){
       filter(team1 == player) %>% 
       pull(team2) ->
       loosers
-    results_matrix[player, loosers] <- 1
+    if(length(loosers)!=0){
+      results_matrix[player, unique(loosers)] <- sapply(unique(loosers), function(x) {sum(loosers==x)})
+    }
   }
   
   matches_matrix <- results_matrix + t(results_matrix)
@@ -67,7 +64,8 @@ ranking_problem <- function(matches.f=matches.f){
     "results_matrix"=results_matrix,
     "number_of_matches_played"=number_of_matches_played,
     "average_scores"=average_scores,
-    "players"=players)
+    "players"=players,
+    "matches_f"=matches.f)
 }
 
 # Maximum likelihood method

@@ -25,7 +25,6 @@ read_csv("world_cup", col_names = c("team1", "team2", "score"), comment="#", col
   matches.f
 ```
 
-
 ```{r}
 m <- ranking_problem(matches.f)
 
@@ -188,7 +187,6 @@ apply(y, 1, fn2) %>%
   res
 ```
 
-
 # Least squares
 ```{r}
 n_matches <- 80
@@ -227,19 +225,56 @@ players[order(ans$par)] # od najsilniejszej do najsłabszej
 
 # Recursive Buchholz tests
 ```{r tests}
-#Macierze z artykułu
+# A <- matrix(c(0, 10, 9, 7, 10, 0, 9, 6, 1, 1, 0, 1, 3, 4, 19, 0), nrow = 4, byrow = TRUE)  # macierz wygranych
+# 
+# recursive_buchholz(A)
 
+#Macierze z artykułu
 #Example 4.2
-#A <- matrix(c(0, 5, 15, 5,5, 0, 5, 15, 5, 5, 0, 7, 5, 5, 3, 0), nrow = 4, byrow = TRUE) 
-A <- matrix(c(0, 10, 9, 7, 10, 0, 9, 6, 1, 1, 0, 1, 3, 4, 19, 0), nrow = 4, byrow = TRUE)
+# A <- matrix(c(0, 5, 15, 5,5, 0, 5, 15, 5, 5, 0, 7, 5, 5, 3, 0), nrow = 4, byrow = TRUE) 
+# A <- matrix(c(0, 10, 9, 7, 10, 0, 9, 6, 1, 1, 0, 1, 3, 4, 19, 0), nrow = 4, byrow = TRUE)
 
 #Example 6.1
-#A <- matrix(c(0, 1, 1, 1, 2, 0, 1, 1, 1, 1, 0, 2, 1, 1, 1, 0), nrow = 4, byrow = TRUE)
-#A <- matrix(c(0, 1, 1, 2, 2, 0, 1, 1, 1, 1, 0, 2, 1, 1, 1, 0), nrow = 4, byrow = TRUE) 
+# A <- matrix(c(0, 1, 1, 1, 2, 0, 1, 1, 1, 1, 0, 2, 1, 1, 1, 0), nrow = 4, byrow = TRUE)
+# A <- matrix(c(0, 1, 1, 2, 2, 0, 1, 1, 1, 1, 0, 2, 1, 1, 1, 0), nrow = 4, byrow = TRUE) 
+library(progress)
+pb <- progress_bar$new(format = " scoring [:bar] :percent eta: :eta", total = 1000)
 
-
-2*ranking(A)
+corr1 <- numeric(1000)
+for(i in rev(28:1000)){
+  n_matches <- i - 26
+  teams <- LETTERS[1:26]
+  n_teams <-  length(teams)
+  
+  strength <- seq(-2, 2, length.out=n_teams)  # A najsłabsza, następnie B itd
+  names(strength) <- teams
+  
+  team1 <- teams
+  team1 <- c(teams, sample(teams, n_matches, replace=T))
+  
+  tibble("team1"=team1,
+         "team2"=sapply(team1, function(x){sample(setdiff(teams, x), 1)})) %>% 
+    {bind_cols(., get_scores(strength[.$team1], strength[.$team2]))} ->
+    matches.f
+  
+  m <- ranking_problem(matches.f)
+  
+  # matches_matrix <- m$matches_matrix
+  results_matrix <- m$results_matrix
+  # number_of_matches_played <- m$number_of_matches_played
+  # average_scores <- m$average_scores
+  # players <- m$players
+  # matches.f <- m$matches_f
+  
+  pred_strength <- 2*ranking(results_matrix)
+  corr1[i] <- cor(strength, pred_strength, method="spearman")
+  pb$tick()
+}
+plot(corr1)
+abline(v=choose(n_teams, 2))
 ```
+
+
 
 # Korelacja pomiędzy wynikami założonymi a otrzymanymi
 ```{r}
