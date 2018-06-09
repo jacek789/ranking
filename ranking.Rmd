@@ -237,7 +237,7 @@ pb <- progress_bar$new(format = " scoring [:bar] :percent eta: :eta", total = 10
 
 corr1 <- numeric(1000)
 for(i in 30:1000){ # zaczynam od 30, żeby była szansa, że rówanie będzie się dalo rozwiązac
-  n_matches <- i - 26
+  n_matches <- 1000 - 26
   teams <- c(LETTERS[1:26], "AA", "AB")
   n_teams <-  length(teams)
   
@@ -250,7 +250,7 @@ for(i in 30:1000){ # zaczynam od 30, żeby była szansa, że rówanie będzie si
   
   tibble("team1"=team1,
          "team2"=sapply(team1, function(x){sample(setdiff(teams, x), 1)})) %>% 
-    {bind_cols(., get_scores(strength[.$team1], strength[.$team2]))} -> 
+    {bind_cols(., get_scores(strength[.$team1], strength[.$team2], stronger_always_win=T))} -> 
     matches.f
   
   m <- ranking_problem(matches.f)
@@ -260,7 +260,7 @@ for(i in 30:1000){ # zaczynam od 30, żeby była szansa, że rówanie będzie si
   # number_of_matches_played <- m$number_of_matches_played
   # average_scores <- m$average_scores
   # players <- m$players
-  # matches.f <- m$matches_f
+  matches.f <- m$matches_f
   
   pred_strength <- 2*ranking(results_matrix)
   corr1[i] <- cor(strength, pred_strength, method="spearman")
@@ -274,8 +274,7 @@ abline(v=choose(n_teams, 2))
 Korelacja liczona kumulatwynie wraz ze wzrostem liczby meczy losowanych ze zbioru wszystkich możliwych,
 dlatego w  tym przykładzie mecze się nie powtarzają
 ```{r tests2}
-
-teams <- LETTERS[1:26]
+teams <- c(LETTERS[1:26], "AA", "AB")
 n_teams <-  length(teams)
 
 strength <- sample(seq(-2, 2, length.out=n_teams), n_teams)  # A najsłabsza, następnie B itd, potem permutujemy
@@ -297,7 +296,7 @@ tibble("x"=c(1, 1:(n_teams-1)), "y"=c(n_teams, 2:n_teams)) %>%
 # usuwamy duplikaty
 all.pairs %>% 
   transmute(team1 = teams[x], team2 = teams[y]) %>% 
-  {bind_cols(., get_scores(strength[.$team1], strength[.$team2]))} ->
+  {bind_cols(., get_scores(strength[.$team1], strength[.$team2], stronger_always_wi=T))} ->
   all_matches
 
 pb <- progress_bar$new(format = " scoring [:bar] :percent eta: :eta", total = choose(n_teams, 2)-n_teams)
@@ -314,17 +313,16 @@ for(i in 1:dim(all_matches)[1]){
     # matches.f <- m$matches_f
     
     pred_strength <- 2*ranking(results_matrix)
-    corr2[i] <- cor(strength, pred_strength, method="spearman")
+    corr2[i] <- cor(strength, pred_strength, method="kendall")
     pb$tick()
   }
 }
 corr2[1:(n_teams-1)] <- corr2[n_teams]
 
-corel <- tibble(x=1:choose(n_teams, 2), gr="cor1", cor=corr2)
-
-# corel %>% 
-#   bind_rows(tibble("x"=1:choose(n_teams, 2), gr="cor4", cor=corr2)) ->
-#   corel
+# corel <- tibble(x=1:choose(n_teams, 2), gr="cor1", cor=corr2)
+corel %>%
+  bind_rows(tibble("x"=1:choose(n_teams, 2), gr="cor4", cor=corr2)) ->
+  corel
 
 ggplot(data=corel) +
   geom_line(aes(x=x, y=cor, color=gr), size=1) +

@@ -10,12 +10,16 @@ library(tictoc)
 }
 
 ## generate scores for different player's strength
-get_scores <- function(strength1, strength2){
+get_scores <- function(strength1, strength2, stronger_always_win=F){
   out <- tibble("score1"=numeric(), "score2"=numeric())
   
   for(i in 1:length(strength1)){
     diff <- sigmoid(strength1[i] - strength2[i])
-    score1 <- sample(0:1, 1, prob=c(1 - diff, diff))
+    if(stronger_always_win){
+      score1 <- as.numeric(strength1[i] > strength2[i])
+    }else{
+      score1 <- sample(0:1, 1, prob=c(1 - diff, diff))
+    }
     score2 <- abs(score1 - 1)
     out %>% 
       bind_rows(tibble("score1"=score1, "score2"=score2)) ->
