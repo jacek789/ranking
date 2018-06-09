@@ -339,9 +339,9 @@ sm <- predict(loess(formula = mean_c ~ x, data=plot.data %>% filter(gr=="cor1"),
 ggplot(data=plot.data) +
   geom_line(aes(x=x, y=cor, color=gr), size=0.5, show.legend=F) +
   scale_y_continuous(limits = c(0, 1), breaks=seq(0, 1, 0.2)) +
-  geom_segment(aes(x=n_teams*5/2, y=0, xend=n_teams*5/2, yend=sm[round(n_teams*5/2)])) +
   stat_smooth(aes(x=x, y=mean_c), method="loess", span=0.2, color="black") +
-  geom_label(aes(x=n_teams*5/2, y=sm[round(n_teams*5/2)]*2/3, label="po 5 meczy"), lineheight=30) +  # considerably slower than geom_text, ale robi ładne ramki
+  geom_segment(aes(x=n_teams*5/2, y=0, xend=n_teams*5/2, yend=sm[round(n_teams*5/2)])) +
+  geom_label(aes(x=n_teams*5/2, y=sm[round(n_teams*5/2)]*2/3, label="po 5 meczy")) +  # considerably slower than geom_text, ale robi ładne ramki
   geom_segment(aes(x=n_teams*10 / 2, y=0, xend=n_teams*10/2, yend=sm[round(n_teams*10/2)])) +
   geom_label(aes(x=n_teams*10/2, y=sm[round(n_teams*10/2)]*3/4, label="po 10 meczy")) +
   theme(
