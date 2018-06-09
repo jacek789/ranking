@@ -274,59 +274,68 @@ abline(v=choose(n_teams, 2))
 Korelacja liczona kumulatwynie wraz ze wzrostem liczby meczy losowanych ze zbioru wszystkich możliwych,
 dlatego w  tym przykładzie mecze się nie powtarzają
 ```{r tests2}
+# TODO można się zastanowić jak inaczej dobierać pary na początku, żeby to korelacja startowa była wyższa. Może drużyny o dużych (małych) różnicach w sile? (na podstawie np poprzedniego rankingu)
+# TODO poprawić labele
 teams <- c(LETTERS[1:26], "AA", "AB")
 n_teams <-  length(teams)
 
-strength <- sample(seq(-2, 2, length.out=n_teams), n_teams)  # A najsłabsza, następnie B itd, potem permutujemy
-names(strength) <- teams
-
-# robimy wszystkie możliwe pary
-tibble("x"=rep(1:n_teams, each=n_teams), "y"=rep(1:n_teams, times=n_teams)) %>% 
-  filter(x!=y) %>% 
-  filter(x < y) %>% 
-  sample_n(choose(n_teams, 2)) ->
-  all.pairs
-
-#dorzucamy "kółeczko z przodu"
-tibble("x"=c(1, 1:(n_teams-1)), "y"=c(n_teams, 2:n_teams)) %>% 
-  bind_rows(all.pairs) %>% 
-  distinct(x, y) ->
-  all.pairs
-
-# usuwamy duplikaty
-all.pairs %>% 
-  transmute(team1 = teams[x], team2 = teams[y]) %>% 
-  {bind_cols(., get_scores(strength[.$team1], strength[.$team2], stronger_always_wi=T))} ->
-  all_matches
-
-pb <- progress_bar$new(format = " scoring [:bar] :percent eta: :eta", total = choose(n_teams, 2)-n_teams)
-corr2 <- numeric(choose(n_teams, 2))
-for(i in 1:dim(all_matches)[1]){
-  if(i >= n_teams){
-    m <- ranking_problem(all_matches[1:i, ])
+corel <- tibble(x=numeric(), gr=character(), cor=numeric())
+pb <- progress_bar$new(format = " scoring [:bar] :percent eta: :eta elapsed: :elapsed", total = 10)
+for(k in 1:10){
+  strength <- sample(seq(-2, 2, length.out=n_teams), n_teams)  # A najsłabsza, następnie B itd, potem permutujemy
+  names(strength) <- teams
   
-    # matches_matrix <- m$matches_matrix
-    results_matrix <- m$results_matrix
-    # number_of_matches_played <- m$number_of_matches_played
-    # average_scores <- m$average_scores
-    # players <- m$players
-    # matches.f <- m$matches_f
+  # robimy wszystkie możliwe pary
+  tibble("x"=rep(1:n_teams, each=n_teams), "y"=rep(1:n_teams, times=n_teams)) %>% 
+    filter(x!=y) %>% 
+    filter(x < y) %>% 
+    sample_n(choose(n_teams, 2)) ->
+    all.pairs
+  
+  #dorzucamy "kółeczko z przodu"
+  tibble("x"=c(1, 1:(n_teams-1)), "y"=c(n_teams, 2:n_teams)) %>% 
+    bind_rows(all.pairs) %>% 
+    distinct(x, y) ->
+    all.pairs
+  
+  # usuwamy duplikaty
+  all.pairs %>% 
+    transmute(team1 = teams[x], team2 = teams[y]) %>% 
+    {bind_cols(., get_scores(strength[.$team1], strength[.$team2], stronger_always_wi=T))} ->
+    all_matches
+  
+  corr2 <- numeric(choose(n_teams, 2))
+  for(i in 1:dim(all_matches)[1]){
+    if(i > n_teams){
+      m <- ranking_problem(all_matches[1:i, ])
     
-    pred_strength <- 2*ranking(results_matrix)
-    corr2[i] <- cor(strength, pred_strength, method="kendall")
-    pb$tick()
+      # matches_matrix <- m$matches_matrix
+      results_matrix <- m$results_matrix
+      # number_of_matches_played <- m$number_of_matches_played
+      # average_scores <- m$average_scores
+      # players <- m$players
+      # matches.f <- m$matches_f
+      
+      pred_strength <- 2*ranking(results_matrix)
+      corr2[i] <- cor(strength, pred_strength, method="kendall")
+    }
   }
+  corr2[1:n_teams] <- corr2[n_teams+1]
+  k.corr <- list("x"=1:choose(n_teams, 2), gr=paste0("cor", k), cor=corr2)
+  corel %>%
+    bind_rows(as.data.frame(k.corr, stringsAsFactors=F)) ->
+    corel
+  pb$tick()
 }
-corr2[1:(n_teams-1)] <- corr2[n_teams]
 
-# corel <- tibble(x=1:choose(n_teams, 2), gr="cor1", cor=corr2)
-corel %>%
-  bind_rows(tibble("x"=1:choose(n_teams, 2), gr="cor4", cor=corr2)) ->
-  corel
-
-ggplot(data=corel) +
-  geom_line(aes(x=x, y=cor, color=gr), size=1) +
-  scale_y_continuous(limits = c(0, 1)) +
+ggplot(data=corel %>% group_by(x) %>% mutate(mean_c = mean(cor)) %>% ungroup()) +
+  geom_line(aes(x=x, y=cor, color=gr), size=0.5, show.legend=F) +
+  scale_y_continuous(limits = c(0, 1), breaks=seq(0, 1, 0.2)) +
+  geom_segment(aes(x=n_teams*5 / 2, y=0, xend=n_teams*5/2, yend=0.6)) +
+  stat_smooth(aes(x=x, y=mean_c), method="loess", span=0.2, color="black") +
+  geom_label(aes(x=n_teams * 5 / 2, y=0.3, label="po 5 meczy")) +  # considerably slower than geom_text, ale robi ładne ramki
+  geom_segment(aes(x=n_teams*10 / 2, y=0, xend=n_teams*10/2, yend=0.68)) +
+  geom_label(aes(x=n_teams * 10 / 2, y=0.7, label="po 10 meczy")) +
   theme(
     panel.background = element_rect(fill = "white"),
     legend.key = element_rect(fill = "white"),
@@ -342,6 +351,86 @@ ggplot(data=corel) +
   )
 ```
 
+To samo co powyżej, tylko nie wybiamy wsztkie możliwe mecze tylko losujemy ze zwracaniem z puli meczów, dodatkowo wynik jest znowu stochastyczny
+```{r tests3}
+# TODO można się zastanowić jak inaczej dobierać pary na początku, żeby to korelacja startowa była wyższa. Może drużyny o dużych (małych) różnicach w sile? (na podstawie np poprzedniego rankingu)
+teams <- c(LETTERS[1:26], "AA", "AB")
+n_teams <-  length(teams)
+
+corel <- tibble(x=numeric(), gr=character(), cor=numeric())
+pb <- progress_bar$new(format = " scoring [:bar] :percent eta: :eta elapsed: :elapsed", total = 5)
+for(k in 1:5){
+  strength <- sample(seq(-2, 2, length.out=n_teams), n_teams)  # A najsłabsza, następnie B itd, potem permutujemy
+  names(strength) <- teams
+  
+  # robimy wszystkie możliwe pary
+  tibble("x"=rep(1:n_teams, each=n_teams), "y"=rep(1:n_teams, times=n_teams)) %>% 
+    filter(x!=y) %>% 
+    filter(x < y) %>% 
+    sample_n(choose(n_teams, 2)) ->
+    all.pairs
+  
+  #dorzucamy "kółeczko z przodu"
+  tibble("x"=c(1, 1:(n_teams-1)), "y"=c(n_teams, 2:n_teams)) %>% 
+    bind_rows(all.pairs) %>% 
+    distinct(x, y) ->
+    all.pairs
+  
+  # usuwamy duplikaty (które występują poniżej kółeczka)
+  all.pairs %>% 
+    transmute(team1 = teams[x], team2 = teams[y]) %>% 
+    {bind_cols(., get_scores(strength[.$team1], strength[.$team2], stronger_always_win=F))} ->
+    all_matches
+  
+  corr2 <- numeric(choose(n_teams, 2))
+  n_matches <- 1000
+  for(i in 1:n_matches){
+    if(i > n_teams){
+      m <- ranking_problem(all_matches[c(1:n_teams, sample(1:choose(n_teams, 2), i - n_teams, replace=T)), ])
+    
+      # matches_matrix <- m$matches_matrix
+      results_matrix <- m$results_matrix
+      # number_of_matches_played <- m$number_of_matches_played
+      # average_scores <- m$average_scores
+      # players <- m$players
+      # matches.f <- m$matches_f
+      
+      pred_strength <- 2*ranking(results_matrix)
+      corr2[i] <- cor(strength, pred_strength, method="kendall")
+    }
+  }
+  corr2[1:n_teams] <- corr2[n_teams+1]
+  k.corr <- list("x"=1:n_matches, gr=paste0("cor", k), cor=corr2)
+  corel %>%
+    bind_rows(as.data.frame(k.corr, stringsAsFactors=F)) ->
+    corel
+  pb$tick()
+}
+
+ggplot(data=corel %>% group_by(x) %>% mutate(mean_c = mean(cor)) %>% ungroup()) +
+  geom_line(aes(x=x, y=cor, color=gr), size=0.5, show.legend=F) +
+  scale_y_continuous(limits = c(0, 1), breaks=seq(0, 1, 0.2)) +
+  stat_smooth(aes(x=x, y=mean_c), method="loess", span=0.2, color="black") +
+  geom_segment(aes(x=n_teams*5, y=0, xend=n_teams*5, yend=0.6)) +
+  geom_label(aes(x=n_teams * 5, y=0.3, label="po 5 meczy")) +  # considerably slower than geom_text, ale robi ładne ramki
+  geom_segment(aes(x=n_teams*10, y=0, xend=n_teams*10, yend=0.68)) +
+  geom_label(aes(x=n_teams * 10, y=0.7, label="po 10 meczy")) +
+  # geom_line(aes(x=x, y=predict(loess(mean_c ~ x, span=0.2), x)), size) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    legend.key = element_rect(fill = "white"),
+    panel.grid.major = element_line(colour = "grey60"),
+    panel.grid.minor = element_line(colour = "grey80"),
+    axis.title = element_text(size = 25, colour = "black"),
+    axis.title.x = element_text(size = 25, colour = "black", margin = margin(t=20)),
+    axis.title.y = element_text(size = 25, colour = "black", margin = margin(r=20)),
+    axis.text = element_text(size = 23),
+    legend.title = element_text(size = 18),
+    legend.text = element_text(size = 16),
+    plot.caption = element_text(color="grey60", face="italic")
+  )
+
+```
 
 
 # Korelacja pomiędzy wynikami założonymi a otrzymanymi
