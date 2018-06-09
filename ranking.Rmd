@@ -301,7 +301,7 @@ for(k in 1:10){
   # usuwamy duplikaty
   all.pairs %>% 
     transmute(team1 = teams[x], team2 = teams[y]) %>% 
-    {bind_cols(., get_scores(strength[.$team1], strength[.$team2], stronger_always_wi=T))} ->
+    {bind_cols(., get_scores(strength[.$team1], strength[.$team2], stronger_always_win=T))} ->
     all_matches
   
   corr2 <- numeric(choose(n_teams, 2))
@@ -328,14 +328,22 @@ for(k in 1:10){
   pb$tick()
 }
 
-ggplot(data=corel %>% group_by(x) %>% mutate(mean_c = mean(cor)) %>% ungroup()) +
+
+corel %>% 
+  group_by(x) %>% 
+  mutate(mean_c = mean(cor)) %>% 
+  ungroup() ->
+  plot.data
+sm <- predict(loess(formula = mean_c ~ x, data=plot.data %>% filter(gr=="cor1"), span=0.2), plot.data %>% filter(gr=="cor1"))
+
+ggplot(data=plot.data) +
   geom_line(aes(x=x, y=cor, color=gr), size=0.5, show.legend=F) +
   scale_y_continuous(limits = c(0, 1), breaks=seq(0, 1, 0.2)) +
-  geom_segment(aes(x=n_teams*5 / 2, y=0, xend=n_teams*5/2, yend=0.6)) +
+  geom_segment(aes(x=n_teams*5/2, y=0, xend=n_teams*5/2, yend=sm[round(n_teams*5/2)])) +
   stat_smooth(aes(x=x, y=mean_c), method="loess", span=0.2, color="black") +
-  geom_label(aes(x=n_teams * 5 / 2, y=0.3, label="po 5 meczy")) +  # considerably slower than geom_text, ale robi ładne ramki
-  geom_segment(aes(x=n_teams*10 / 2, y=0, xend=n_teams*10/2, yend=0.68)) +
-  geom_label(aes(x=n_teams * 10 / 2, y=0.7, label="po 10 meczy")) +
+  geom_label(aes(x=n_teams*5/2, y=sm[round(n_teams*5/2)]*2/3, label="po 5 meczy"), lineheight=30) +  # considerably slower than geom_text, ale robi ładne ramki
+  geom_segment(aes(x=n_teams*10 / 2, y=0, xend=n_teams*10/2, yend=sm[round(n_teams*10/2)])) +
+  geom_label(aes(x=n_teams*10/2, y=sm[round(n_teams*10/2)]*3/4, label="po 10 meczy")) +
   theme(
     panel.background = element_rect(fill = "white"),
     legend.key = element_rect(fill = "white"),
@@ -349,6 +357,8 @@ ggplot(data=corel %>% group_by(x) %>% mutate(mean_c = mean(cor)) %>% ungroup()) 
     legend.text = element_text(size = 16),
     plot.caption = element_text(color="grey60", face="italic")
   )
+
+
 ```
 
 To samo co powyżej, tylko nie wybiamy wsztkie możliwe mecze tylko losujemy ze zwracaniem z puli meczów, dodatkowo wynik jest znowu stochastyczny
